@@ -1,86 +1,77 @@
-from script import *
-import socket
 from datetime import date, timedelta
-import time
-from configparser import ConfigParser
-import sys
-import mysql.connector
-import threading
 
-def connectSQL(host, user, password, database_name):
-  try:
-    mydb = mysql.connector.connect(
-      host=host,
-      user=user,
-      password=password,
-      database=database_name
-    )
-    print("Database found successfully.")
-    return mydb
-  except:
-    sys.exit("Database not found!")
+def tag_def(arr):
+    for i in arr:
+        if i[0:2] == 'ID':
+            return i[3:]
 
-def insertData(mycursor, table, data):
-    sql = f"INSERT INTO {table} (date, time, lat, lon, device_id) VALUES (%s, %s, %s, %s, %s)"
+def t_convert(s): 
+    s = s %(24*3600)
+    h= s//3600
+    s %= 3600
+    m= s//60
+    s%=60
+    return "%d:%02d:%02d" % (h,m,s)
 
+def k_value(num):
+    if num==0:
+        return '2D GPS'
+    if num==1:
+        return '3D GPS'
+    if num==2:
+        return '2D DGPS'
+    if num==3:
+        return '3D DGPS'
+    if num==9:
+        return 'Unknown'
+
+def l_value(num):
+    if num==0:
+        return 'Not available'
+    if num==1:
+        return 'Older than 10 seconds'
+    if num==2:
+        return 'Fresh, less than 10 seconds'
+    if num==9:
+        return 'GPS Failure'
+
+def text_EV(a):
     try:
-        mycursor.execute(sql, data)
-        print("Data inserted successfully.")
+        code = a[0:3]
+        event_Definition = int(a[3:5])
+        date0 = int(a[5:9])
+        day = int(a[9])
+        date1 = date(1980, 1, 6)
+        date_final = date1 + timedelta(days= date0*7+day)
+        time = int(a[10:15])
+        final_time = t_convert(time)
+        sign_lat = a[15]
+        lat = float(a[16:23])/100000
+        final_latitude = sign_lat +str(lat)
+        sign_lon = a[23]
+        lon = float(a[24:32])/100000
+        final_longitude = sign_lon+ str(lon)
+        speed = int(a[32:35])
+        v_heading = int(a[35:38])
+        k = k_value(int(a[38]))
+        l = l_value(int(a[39]))
+
+        return [date_final, final_time, final_latitude, final_longitude]
     except:
-        # print(val)
-        sys.exit("Data not inserted!")
+        print("Error!")
 
-def server_program():
-    val = [] #data to be entered in the database
-
-    # get the hostname
-    file= 'Config.ini'
-    config= ConfigParser()
-    config.read(file)
-    
-    host = socket.gethostname()
-    port = int(config['Port']['port'])  # Call port from Config File
-    print(port)
-    
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # get instance
-    server_socket.bind((host, port))  # bind host address and port together
-
-    # configure how many client the server can listen simultaneously
-    server_socket.listen(5)
-    conn, address = server_socket.accept()
-    while True:
-          # accept new connection
-        #threading.Thread(target=client, args=(addr,)).start()
-    
-        print("Connection from: " + str(address))
-        # receive data stream. it won't accept data packet greater than 1024 bytes
-        data = conn.recv(1024).decode()
-        data = str(data)
-        #while(data[-1] != '<'):
-            #data = data[:-1]
-        #print(data)
-        
-        if not data:
-            break
-        #print("from connected user: " + str(data))
-       
-        print(data)
-        '''
-        try:
-          val = text_EV(data)
-          val.append(extended_EV(data))
-
-          mydb = connectSQL(config['Database']['host'], config['Database']['user'], config['Database']['password'], config['Database']['database_name'])
-          mycursor = mydb.cursor()
-
-          insertData(mycursor, config['Database']['table'], val)
-          mydb.commit()
-        except:
-          print("Text is not in correct format")
-        '''
-        
-    conn.close()  # close the connection
-
-
-if __name__ == '__main__':
-    server_program()
+def extended_EV(b):
+    try:
+        val = b[41:]
+        s =''
+        arr = []
+        for i in val:
+            if i==';':
+                arr.append(s)
+                s=''
+            else:
+                s+=i
+        arr.append(s)
+        return tag_def(arr)
+    except:
+        print("Error!")
